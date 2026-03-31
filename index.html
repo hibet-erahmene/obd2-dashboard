@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBD2 Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #050a0e;
+    --panel:   #0a1520;
+    --border:  #0d2a3a;
+    --accent:  #00d4ff;
+    --accent2: #ff6b00;
+    --danger:  #ff2244;
+    --ok:      #00ff88;
+    --text:    #c8e8f0;
+    --dim:     #3a6070;
+    --glow:    0 0 18px rgba(0,212,255,0.35);
+    --glow2:   0 0 18px rgba(255,107,0,0.35);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::after {
+    content:''; position:fixed; inset:0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
+    pointer-events:none; z-index:999;
+  }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image: linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events:none; z-index:0;
+  }
+  .wrapper { position:relative; z-index:1; max-width:960px; margin:0 auto; padding:20px 16px 40px; }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:24px;
+    flex-wrap:wrap; gap:12px;
+  }
+  .logo { font-family:'Orbitron',sans-serif; font-weight:900; font-size:1.4rem; color:var(--accent); text-shadow:var(--glow); letter-spacing:3px; text-transform:uppercase; }
+  .logo span { color:var(--accent2); }
+  .status-bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .pill { padding:4px 14px; border-radius:20px; font-size:0.72rem; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; border:1px solid currentColor; transition:all 0.4s; }
+  .pill.ok      { color:var(--ok);     border-color:var(--ok);     text-shadow:0 0 8px var(--ok); }
+  .pill.err     { color:var(--danger); border-color:var(--danger); text-shadow:0 0 8px var(--danger); }
+  .pill.waiting { color:var(--dim);    border-color:var(--dim); }
+  .timestamp { font-size:0.7rem; color:var(--dim); }
+
+  .big-gauges { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .arc-card {
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:20px 16px 16px; display:flex; flex-direction:column; align-items:center;
+    position:relative; overflow:hidden;
+  }
+  .arc-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg, transparent, var(--accent), transparent); opacity:0.6; }
+  .arc-label { font-size:0.65rem; letter-spacing:2px; color:var(--dim); text-transform:uppercase; margin-bottom:8px; }
+  svg.arc { width:160px; height:90px; overflow:visible; }
+  .arc-track { fill:none; stroke:var(--border); stroke-width:8; stroke-linecap:round; }
+  .arc-fill  { fill:none; stroke-width:8; stroke-linecap:round; transition:stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1), stroke 0.4s; }
+  .arc-val { font-family:'Orbitron',sans-serif; font-size:2rem; font-weight:900; color:var(--accent); text-shadow:var(--glow); line-height:1; margin:6px 0 2px; transition:color 0.4s; }
+  .arc-unit { font-size:0.65rem; color:var(--dim); letter-spacing:2px; }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:12px; margin-bottom:16px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px 14px 12px; position:relative; overflow:hidden; transition:border-color 0.3s, box-shadow 0.3s; }
+  .card:hover { border-color:var(--accent); box-shadow:var(--glow); }
+  .card-label { font-size:0.6rem; letter-spacing:2px; color:var(--dim); text-transform:uppercase; margin-bottom:6px; }
+  .card-value { font-family:'Orbitron',sans-serif; font-size:1.55rem; font-weight:700; color:var(--text); transition:color 0.4s; line-height:1.1; }
+  .card-unit  { font-size:0.6rem; color:var(--dim); letter-spacing:1px; margin-top:2px; }
+  .bar-track  { height:3px; background:var(--border); border-radius:2px; margin-top:10px; overflow:hidden; }
+  .bar-fill   { height:100%; border-radius:2px; background:linear-gradient(90deg, var(--accent), var(--accent2)); transition:width 0.6s cubic-bezier(.4,0,.2,1); width:0%; }
+
+  .hot  { color:var(--danger)  !important; text-shadow:0 0 10px var(--danger); }
+  .warn { color:var(--accent2) !important; text-shadow:0 0 10px var(--accent2); }
+  .cool { color:var(--ok)      !important; }
+  .batt-ok   .card-value { color:var(--ok); }
+  .batt-warn .card-value { color:var(--accent2); }
+  .batt-low  .card-value { color:var(--danger); }
+
+  .offline-banner {
+    display:none; text-align:center; padding:12px;
+    background:rgba(255,34,68,0.15); border:1px solid var(--danger);
+    border-radius:10px; color:var(--danger); font-size:0.8rem;
+    letter-spacing:1px; margin-bottom:16px;
+  }
+  .offline-banner.show { display:block; }
+
+  footer { text-align:center; font-size:0.65rem; color:var(--dim); border-top:1px solid var(--border); padding-top:16px; margin-top:8px; letter-spacing:1px; }
+
+  @keyframes dataPulse { 0%{opacity:1} 40%{opacity:0.4} 100%{opacity:1} }
+  .pulse { animation:dataPulse 0.35s ease; }
+
+  @media(max-width:520px){
+    .big-gauges { grid-template-columns:1fr; }
+    .arc-val { font-size:1.6rem; }
+    .logo { font-size:1.1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <div class="logo">OBD<span>2</span> LIVE</div>
+    <div class="status-bar">
+      <div class="pill waiting" id="bleStatus">ESP32: ---</div>
+      <div class="pill waiting" id="wsStatus">WS: ---</div>
+      <div class="timestamp" id="ts">--:--:--</div>
+    </div>
+  </header>
+
+  <div class="offline-banner" id="offlineBanner">⚠ ESP32 offline or not sending data</div>
+
+  <div class="big-gauges">
+    <div class="arc-card">
+      <div class="arc-label">Engine RPM</div>
+      <svg class="arc" viewBox="0 0 160 90">
+        <path class="arc-track" d="M10,85 A75,75 0 0,1 150,85"/>
+        <path class="arc-fill" id="rpmArc" d="M10,85 A75,75 0 0,1 150,85" stroke="var(--accent)" stroke-dasharray="236" stroke-dashoffset="236"/>
+      </svg>
+      <div class="arc-val" id="rpmVal">--</div>
+      <div class="arc-unit">RPM</div>
+    </div>
+    <div class="arc-card">
+      <div class="arc-label">Vehicle Speed</div>
+      <svg class="arc" viewBox="0 0 160 90">
+        <path class="arc-track" d="M10,85 A75,75 0 0,1 150,85"/>
+        <path class="arc-fill" id="spdArc" d="M10,85 A75,75 0 0,1 150,85" stroke="var(--accent2)" stroke-dasharray="236" stroke-dashoffset="236"/>
+      </svg>
+      <div class="arc-val" id="spdVal" style="color:var(--accent2);text-shadow:var(--glow2)">--</div>
+      <div class="arc-unit">KM/H</div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card" id="cardCoolant">
+      <div class="card-label">Coolant Temp</div>
+      <div class="card-value" id="coolantVal">--</div>
+      <div class="card-unit">°C</div>
+      <div class="bar-track"><div class="bar-fill" id="coolantBar"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Intake Air Temp</div>
+      <div class="card-value" id="iatVal">--</div>
+      <div class="card-unit">°C</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Engine Load</div>
+      <div class="card-value" id="loadVal">--</div>
+      <div class="card-unit">%</div>
+      <div class="bar-track"><div class="bar-fill" id="loadBar"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Throttle</div>
+      <div class="card-value" id="throttleVal">--</div>
+      <div class="card-unit">%</div>
+      <div class="bar-track"><div class="bar-fill" id="throttleBar"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Manifold Pressure</div>
+      <div class="card-value" id="mapVal">--</div>
+      <div class="card-unit">kPa</div>
+    </div>
+    <div class="card">
+      <div class="card-label">MAF Rate</div>
+      <div class="card-value" id="mafVal">--</div>
+      <div class="card-unit">g/s</div>
+    </div>
+    <div class="card" id="cardFuel">
+      <div class="card-label">Fuel Level</div>
+      <div class="card-value" id="fuelVal">--</div>
+      <div class="card-unit">%</div>
+      <div class="bar-track"><div class="bar-fill" id="fuelBar"></div></div>
+    </div>
+    <div class="card" id="cardBatt">
+      <div class="card-label">Battery</div>
+      <div class="card-value" id="battVal">--</div>
+      <div class="card-unit">VOLTS</div>
+      <div class="bar-track"><div class="bar-fill" id="battBar"></div></div>
+    </div>
+  </div>
+
+  <footer>OBD2 Live Dashboard — powered by ESP32 + Render</footer>
+</div>
+
+<script>
+const ARC_LEN = 236;
+
+function setArc(id, value, max) {
+  const pct = Math.max(0, Math.min(1, value / max));
+  document.getElementById(id).style.strokeDashoffset = ARC_LEN * (1 - pct);
+}
+function fmt(v, dec=0) {
+  if (v === null || v === undefined || v === -1 || v === -1000) return '--';
+  const n = parseFloat(v);
+  return isNaN(n) ? '--' : n.toFixed(dec);
+}
+function setBar(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+function update(d) {
+  document.getElementById('ts').textContent = new Date().toLocaleTimeString();
+  const blePill = document.getElementById('bleStatus');
+  const banner  = document.getElementById('offlineBanner');
+
+  if (d.error) {
+    blePill.textContent = d.error === 'esp32_offline' ? 'ESP32: OFFLINE' : 'ESP32: NO DATA';
+    blePill.className = 'pill err';
+    banner.classList.add('show');
+    return;
+  }
+
+  banner.classList.remove('show');
+  blePill.textContent = 'ESP32: LIVE';
+  blePill.className = 'pill ok';
+
+  // RPM
+  const rpm = parseInt(d.rpm) || 0;
+  document.getElementById('rpmVal').textContent = fmt(d.rpm);
+  setArc('rpmArc', rpm, 8000);
+  const rpmEl = document.getElementById('rpmVal');
+  rpmEl.className = 'arc-val' + (rpm > 6000 ? ' hot' : rpm > 4000 ? ' warn' : '');
+
+  // Speed
+  document.getElementById('spdVal').textContent = fmt(d.speed);
+  setArc('spdArc', parseInt(d.speed)||0, 220);
+
+  // Coolant
+  const cool = parseInt(d.coolant);
+  document.getElementById('coolantVal').textContent = fmt(d.coolant);
+  setBar('coolantBar', ((cool + 40) / 170) * 100);
+  document.getElementById('coolantVal').className = 'card-value' + (cool > 105 ? ' hot' : cool > 90 ? ' warn' : ' cool');
+
+  // IAT
+  document.getElementById('iatVal').textContent = fmt(d.iat);
+
+  // Load
+  document.getElementById('loadVal').textContent = fmt(d.load, 1);
+  setBar('loadBar', parseFloat(d.load));
+
+  // Throttle
+  document.getElementById('throttleVal').textContent = fmt(d.throttle, 1);
+  setBar('throttleBar', parseFloat(d.throttle));
+
+  // MAP & MAF
+  document.getElementById('mapVal').textContent = fmt(d.map);
+  document.getElementById('mafVal').textContent = fmt(d.maf, 2);
+
+  // Fuel
+  const fuel = parseFloat(d.fuel);
+  document.getElementById('fuelVal').textContent = fmt(d.fuel, 1);
+  setBar('fuelBar', fuel);
+  document.getElementById('fuelVal').className = 'card-value' + (fuel < 10 ? ' hot' : fuel < 20 ? ' warn' : '');
+
+  // Battery
+  const batt = parseFloat(d.batt);
+  document.getElementById('battVal').textContent = fmt(d.batt, 2);
+  setBar('battBar', ((batt - 10) / 5) * 100);
+  document.getElementById('cardBatt').className = 'card' + (batt < 11.5 ? ' batt-low' : batt < 12.5 ? ' batt-warn' : ' batt-ok');
+}
+
+// WebSocket — auto-detects ws:// or wss:// based on page protocol
+let socket, retryDelay = 2000, retries = 0;
+const wsPill = document.getElementById('wsStatus');
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  socket = new WebSocket(proto + '//' + location.host + '/ws');  // ← uses same host as page, works on Render
+
+  socket.onopen = () => {
+    wsPill.textContent = 'WS: LIVE';
+    wsPill.className = 'pill ok';
+    retries = 0;
+  };
+  socket.onclose = () => {
+    wsPill.textContent = 'WS: OFF';
+    wsPill.className = 'pill err';
+    retries++;
+    setTimeout(connect, Math.min(2000 * retries, 15000));
+  };
+  socket.onerror = () => {
+    wsPill.textContent = 'WS: ERR';
+    wsPill.className = 'pill err';
+  };
+  socket.onmessage = (e) => {
+    try { update(JSON.parse(e.data)); } catch(_) {}
+  };
+}
+
+connect();
+</script>
+</body>
+</html>
